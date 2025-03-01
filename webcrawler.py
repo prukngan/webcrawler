@@ -10,11 +10,48 @@ from concurrent.futures import ThreadPoolExecutor
 from multiprocessing import Process, Queue, Manager, Value
 from threading import Lock
 import hashlib
+import shutil
 
-DOMAIN = "ku.ac.th"
-START_URL = "https://ku.ac.th"
+# DOMAIN = "ku.ac.th"
+DOMAIN = [
+    "www.nekopost.net",
+    "www.so-manga.com",
+    "www.kingsmanga.net",
+    "www.go-manga.com",
+    "www.mangakimi.com",
+    "www.up-manga.com",
+    "www.oremanga.net",
+    "www.inu-manga.com",
+    "www.flash-manga.com",
+    "www.slow-manga.com",
+]
+
+START_URLS = [
+    "https://www.nekopost.net/",
+    "https://www.so-manga.com/manga/",
+    "https://www.kingsmanga.net/",
+    "https://www.go-manga.com/",
+    "https://www.mangakimi.com/",
+    "https://www.up-manga.com/",
+    "https://www.oremanga.net/",
+    "https://www.inu-manga.com/",
+    "https://www.flash-manga.com/",
+    "https://www.slow-manga.com/",
+]
+
+
+# START_URL = "https://ku.ac.th"
 OUTPUT_DIR = "html"
-HEADERS = {'User-Agent': 'Phongsathon', 'From': 'phongsathon.r@ku.th'}
+
+HEADERS = {
+    'User-Agent': 'Phongsathon/1.0',
+    'From': 'phongsathon.r@ku.th',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+    'Accept-Encoding': 'gzip, deflate',
+    'Accept-Language': 'th-TH,th;q=0.9',
+    'Connection': 'keep-alive'
+}
+
 # HEADERS = {'User-Agent': 'Bubee'}
 MAX_THREADS = 10
 FETCH_DELAY = 1
@@ -58,6 +95,16 @@ def load_domain_from_html():
         print(f"[Loaded] {url_queue.qsize} domain from {OUTPUT_DIR}")
     except Exception as e:
         print(f"[Error] Failed to load domain from {OUTPUT_DIR}: {e}")
+
+def load_url_from_log():
+    url_pattern = r"https?://[^\s]+"
+
+    with open(FETCH_LOG, "r", encoding="utf-8") as file:
+        text = file.read()
+
+    urls = re.findall(url_pattern, text)
+
+    return urls
 
 # --------------------------
 # DNS Resolver
@@ -169,7 +216,7 @@ def extract_links(html, base_url):
     return links
 
 def is_valid(url):
-    if DOMAIN in urlparse(url).netloc:
+    if  urlparse(url).netloc in DOMAIN:
         if url.endswith('.html') or url.endswith('.htm') or url.endswith('.php'):
             return True
         if url.endswith(('.pdf', '.doc', '.docx', '.xls', '.xlsx',
@@ -192,13 +239,13 @@ def save_html(url, content):
         os.makedirs(directory, exist_ok=True)
 
         file_name = os.path.basename(path) or "dummy"
-        if not file_name == "dummy" and not file_name.endswith(('.htm', '.html', '.php')):
-            if '.' not in file_name:
-                file_name += ".html"
+        # if not file_name == "dummy" and not file_name.endswith(('.htm', '.html', '.php')):
+        #     if '.' not in file_name:
+        #         file_name += ".html"
 
         if len(file_name) > 255:
-            hashed_name = hashlib.sha256(file_name.encode('utf-8')).hexdigest()[:20]
-            file_name = f"{hashed_name}.html"
+            # hashed_name = hashlib.sha256(file_name.encode('utf-8')).hexdigest()[:20]
+            file_name = f"{file_name[:20]}.html"
 
         file_path = os.path.join(directory, file_name)
 
@@ -220,10 +267,22 @@ def save_html(url, content):
 # --------------------------
 
 def main():
-    load_domain_from_html()
-    count_download = 0
-    
-    url_queue.put(START_URL)
+
+    # error_urls = load_url_from_log()
+
+    if os.path.exists(LOG_DIR):
+        shutil.rmtree(LOG_DIR)  # Delete the existing directory
+    os.makedirs(LOG_DIR)  # Recreate the directory
+
+    # load_domain_from_html()
+    # count_download = 0
+
+    # for url in error_urls:
+    #     url_queue.put(url)
+
+    for url in START_URLS:
+        url_queue.put(url)
+        print(f"Put url to queue : {url}")
 
     processes = []
     for _ in range(ANALYZE_PROCESS):
@@ -234,7 +293,7 @@ def main():
 
     with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
         try:
-            while count_download < 20000:
+            while count_download.value < 20000:
                 if not url_queue.empty():
 
                     urls_to_fetch = []
@@ -255,7 +314,7 @@ def main():
                 print("=====================================")
                 print(f'Count Visited: {len(visited)}')
                 print(f'Count URL Queue: {url_queue.qsize()}')
-                print(f'Count Download: {count_download}')
+                print(f'Count Download: {count_download.value}')
                 print("=====================================\n")
 
                 for i, process in enumerate(processes):
